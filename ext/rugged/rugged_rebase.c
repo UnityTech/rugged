@@ -29,8 +29,10 @@ extern VALUE rb_cRuggedIndex;
 extern VALUE rb_cRuggedRepo;
 extern VALUE rb_cRuggedCommit;
 extern VALUE rb_cRuggedReference;
+extern VALUE rb_eRuggedErrors[];
 
 VALUE rb_cRuggedRebase;
+VALUE rb_eRuggedRebaseAlreadyAppliedError;
 
 static VALUE rebase_operation_type(git_rebase_operation *operation);
 
@@ -189,11 +191,10 @@ cleanup:
 	git_annotated_commit_free(upstream);
 	git_annotated_commit_free(onto);
 
-	if (error) {
-		rugged_exception_check(error);
-	} else if (exception) {
+	if (exception)
 		rb_jump_tag(exception);
-	}
+
+	rugged_exception_check(error);
 
 	return rugged_rebase_new(klass, rb_repo, rebase);
 }
@@ -318,6 +319,12 @@ static VALUE rb_git_rebase_commit(int argc, VALUE *argv, VALUE self)
 	git_signature_free(author);
 	git_signature_free(committer);
 
+	if (error == GIT_EAPPLIED && giterr_last()->klass == GITERR_REBASE) {
+		VALUE rb_error = rb_exc_new2(rb_eRuggedRebaseAlreadyAppliedError, giterr_last()->message);
+		giterr_clear();
+		rb_exc_raise(rb_error);
+	}
+
 	rugged_exception_check(error);
 
 	return rugged_create_oid(&id);
@@ -397,6 +404,7 @@ static VALUE rebase_operation_type(git_rebase_operation *operation)
 void Init_rugged_rebase(void)
 {
 	rb_cRuggedRebase = rb_define_class_under(rb_mRugged, "Rebase", rb_cObject);
+	rb_eRuggedRebaseAlreadyAppliedError = rb_define_class_under(rb_cRuggedRebase, "AlreadyAppliedError", rb_eRuggedErrors[GITERR_REBASE]);
 
 	rb_define_singleton_method(rb_cRuggedRebase, "new", rb_git_rebase_new, -1);
 	rb_define_method(rb_cRuggedRebase, "next",  rb_git_rebase_next,  0);

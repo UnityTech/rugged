@@ -131,4 +131,20 @@ class TestRebase < Rugged::TestCase
     commit_id = rebase.commit(committer: @sig)
     assert_equal "db7af47222181e548810da2ab5fec0e9357c5637", commit_id
   end
+
+  def test_inmemory_already_applied_patch
+    rebase = Rugged::Rebase.new(@repo, "refs/heads/asparagus", "refs/heads/master", inmemory: true)
+
+    op = rebase.next()
+    idx = rebase.inmemory_index
+
+    idx.read_tree(@repo.branches["master"].target.tree)
+
+    err = assert_raises(Rugged::Rebase::AlreadyAppliedError) do
+      rebase.commit(committer: @sig)
+    end
+
+    assert_kind_of Rugged::RebaseError, err
+    assert_equal "this patch has already been applied", err.message
+  end
 end
